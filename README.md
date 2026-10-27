@@ -8,6 +8,10 @@
 
 > **Deterministic, relational, PII-sanitized test data management (TDM) pipeline for financial APIs.**
 
+<p align="center">
+  <img src="docs/assets/seeding-demo.gif" alt="Data Seeding Pipeline Execution Demo" width="820"/>
+</p>
+
 ---
 
 ## 📌 Problem Statement / O Problema de Engenharia
@@ -32,24 +36,30 @@ In integration and E2E testing for fintech and FX systems, test flakiness and en
 
 ## 🏛️ Architecture & Data Cascade / Arquitetura
 
-```
-[SeedingPlan] ── (Seed: 42, Tenants: 2, Accounts: 2, Txs: 5)
-      │
-      ▼
-┌──────────────┐
-│    Tenant    │  (CNPJ validado Mod-11, status ativo)
-└──────┬───────┘
-       │
-       ├─────────────────────────────────┐
-       ▼                                 ▼
-┌──────────────┐                  ┌──────────────┐
-│     User     │ (CPF Mod-11)     │   Account    │ (BRL / USD balance)
-└──────────────┘                  └──────┬───────┘
-       │                                 │
-       ▼                                 ▼
-┌──────────────┐                  ┌──────────────┐
-│   Webhook    │ (Event hash)     │ Transaction  │ (UNIQUE tenant + idempotency_key)
-└──────────────┘                  └──────────────┘
+```mermaid
+flowchart TD
+    subgraph Plan["Deterministic Input"]
+        P["SeedingPlan<br/>(seed: 42, tenants: 3, accounts: 2, txs: 5)"]
+    end
+
+    subgraph Hierarchy["Strict Relational Hierarchy (PRAGMA foreign_keys = ON)"]
+        T["Tenant<br/>• id (UUID5)<br/>• legal_id: CNPJ Mod-11 Checksum<br/>• run_id: run_b74e84d1"]
+        U["User<br/>• id (UUID5)<br/>• cpf: CPF Mod-11 Checksum<br/>• role: ADMIN / MEMBER"]
+        A["Account<br/>• id (UUID5)<br/>• currency: BRL / USD<br/>• balance: Decimal"]
+        TX["Transaction<br/>• id (UUID5)<br/>• UNIQUE(tenant_id, idempotency_key)<br/>• status: COMPLETED"]
+        W["WebhookDelivery<br/>• id (UUID5)<br/>• payload_hash: HMAC SHA-256"]
+    end
+
+    subgraph Teardown["Zero-Residue Lifecycle"]
+        TD["Teardown by run_id<br/>DELETE FROM tenants WHERE run_id = ?<br/>(Cascading deletes all child records)"]
+    end
+
+    P -->|Deterministic RNG| T
+    T -->|FK: tenant_id| U
+    T -->|FK: tenant_id| A
+    A -->|FK: account_id| TX
+    U -->|FK: user_id| W
+    T -.->|Post-test cleanup| TD
 ```
 
 ---
@@ -100,6 +110,16 @@ uv run seed-pipeline verify --db-path seeded_data/test_db.sqlite
 ```bash
 uv run seed-pipeline teardown run_b74e84d1 --db-path seeded_data/test_db.sqlite
 ```
+
+---
+
+## 📊 Seeding Metrics & Referential Soundness
+
+Every seed execution verifies and outputs execution benchmarks across table counts and referential constraints:
+
+<p align="center">
+  <img src="docs/assets/seeding-table.png" alt="Seeding Metrics & Validation Summary" width="820"/>
+</p>
 
 ---
 
