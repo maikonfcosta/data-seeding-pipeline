@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments
+.venv/
+.env
+
+# Seeding & Test outputs
+*.db
+*.sqlite
+*.sqlite3
+seeded_data/
+exported_data/
+test-results/

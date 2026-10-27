@@ -1,0 +1,49 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint & Test Suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-groups
+
+      - name: Run linter (ruff)
+        run: |
+          uv run ruff check .
+
+      - name: Run test suite with coverage gate
+        run: |
+          uv run pytest --cov=src/data_seeding_pipeline --cov-report=term-missing --cov-report=xml --cov-fail-under=85
+
+      - name: Test CLI execution and JSON artifact export
+        run: |
+          uv run seed-pipeline seed --seed 42 --tenants 3 --export-json artifacts/seeded_sample.json
+          uv run seed-pipeline verify --db-path seeded_data/test_db.sqlite
+
+      - name: Upload seeded sample artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: seeded-sample-${{ matrix.python-version }}
+          path: artifacts/seeded_sample.json
+          retention-days: 7
